@@ -1,20 +1,16 @@
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
-import { ChatCompletionRequestMessage, Configuration, OpenAIApi } from "openai";
+
 
 import { checkSubscription } from "@/lib/subscription";
 import { incrementApiLimit, checkApiLimit } from "@/lib/api-limit";
 
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY // This is also the default, can be omitted
 });
 
-const openai = new OpenAIApi(configuration);
-
-const instructionMessage: ChatCompletionRequestMessage = {
-  role: "system",
-  content: "Você é um gerador de código. Você deve responder apenas em trechos de código de redução. Use comentários de código para explicações."
-};
 
 export async function POST(
   req: Request
@@ -28,7 +24,7 @@ export async function POST(
       return new NextResponse("Não autorizado", { status: 401 });
     }
 
-    if (!configuration.apiKey) {
+    if (!openai.apiKey) {
       return new NextResponse("OpenAI API Não configurada", { status: 500 });
     }
 
@@ -43,16 +39,19 @@ export async function POST(
       return new NextResponse("A avaliação gratuita expirou. Atualize para premium.", { status: 403 });
     }
 
-    const response = await openai.createChatCompletion({
+
+    const createChatCompletion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
-      messages: [instructionMessage, ...messages]
+      messages: [{role: "system",
+      content: "Você é um gerador de código. Você deve responder apenas em trechos de código de redução. Use comentários de código para explicações."}],
     });
+   
 
     if (!isPro) {
       await incrementApiLimit();
     }
 
-    return NextResponse.json(response.data.choices[0].message);
+    return NextResponse.json(createChatCompletion.choices[0].message);
   } catch (error) {
     console.log('[CODE_ERROR]', error);
     return new NextResponse("Internal Error", { status: 500 });
